@@ -102,7 +102,6 @@ out:
 
 static void __exit t_exit(void)
 {
-   flag = 0;
    TMEMINFO("GOODBYE,MODULE\n");
 }
 
