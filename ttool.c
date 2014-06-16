@@ -11,12 +11,18 @@
 #include <errno.h>
 
 
-
 struct option_info {
 	int threads;
 	unsigned long copysize;
+        char cmd;
 };
 
+struct para{
+       int threads;
+       unsigned long copysize;
+};
+
+static struct option_info mkoptions;
 
 void usage(char *name)
 {
@@ -28,22 +34,6 @@ void usage(char *name)
 	printf("Detach : %s -d /dev/tier_device_name\n", name);
 	exit(-1);
 }
-
-if (argc < 3)
-        usage(argv[0]);
-	if (0 != get_opts(argc, argv))
-		exit(-1);
-
-	if ((fd = open("/dev/tmemcontrol", mode)) < 0) {
-		fprintf(stderr,
-			"Failed to open /dev/tmemcontrol, is test_mem.ko loaded?\n");
-		exit(-1);
-	}
-
-	if (-1 == flock(fd, LOCK_EX)) {
-		fprintf(stderr, "Failed to lock /dev/tmemcontrol\n");
-		exit(-1);
-	}
 
 
 int get_opts(int argc,char *argv[])
@@ -86,4 +76,49 @@ int get_opts(int argc,char *argv[])
               }
          printf("\n");
          return ret;
+}
+
+int main(int argc,char *argv[])
+{
+
+    struct para pa;
+    if (argc < 3)
+        usage(argv[0]);
+        if (0 != get_opts(argc, argv))
+                exit(-1);
+
+        if ((fd = open("/dev/tmemcontrol", mode)) < 0) {
+                fprintf(stderr,
+                        "Failed to open /dev/tmemcontrol, is test_mem.ko loaded?\n");
+                exit(-1);
+        }
+
+        if (-1 == flock(fd, LOCK_EX)) {
+                fprintf(stderr, "Failed to lock /dev/tmemcontrol\n");
+                exit(-1);
+        }
+
+        switch(mkoptions.cmd)
+        {
+           case 'r':
+                 if(ioctl(fd,TMEM_RUN,&pa) < 0)
+                 {
+                     rc = 1;
+                     fprintf(stderr,"failed to run test mem module\n");
+                     return rc;       
+                 } 
+                 break;
+            case 'q':
+                  if(ioctl(fd,TMEM_STOP,0) < 0)
+                  {
+                     rc = 1;
+                     fprintf(stderr,"failed to stop test mem module\n");  
+                     return rc;
+                  }
+                  break;
+            default:
+                  fprintf(stderr,"unknow command\n");
+                  abort();
+        }
+        return 0; 
 }
