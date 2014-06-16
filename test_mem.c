@@ -11,7 +11,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 #include "test_mem.h"
 
 #define TMEM_VERSION "0.0.1" 
-#define THREADS 3
+#define THREADS 8
 #define BASIC_SIZE 1024*1024
 #define CPUHZ 2599998
 
@@ -36,7 +36,7 @@ static int test_thread(void *data)
    char *buf_read;
    char *buf_write;
    int num_rd,count = 0;
-   unsigned long start, intv=5*HZ;
+   unsigned long start, intv=10*HZ;
 
 
    buf_read = vmalloc(BASIC_SIZE);
