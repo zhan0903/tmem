@@ -150,6 +150,11 @@ static int __init t_init(void)
 static void __exit t_exit(void)
 {
     TMEMINFO("GOODBYE,MODULE\n");
+    if(misc_deregister(&_tmem_misc) < 0)
+    {
+         TMEMERR("misc_deregister failed for tmem control device");
+    }
+    mutex_destroy(&ioctl_mutex);
 }
 
 

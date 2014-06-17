@@ -32,7 +32,7 @@
 #include <linux/net.h>
 #include <linux/inet.h>
 #include <asm/div64.h>
-
+#endif
 
 #define TMEM_RUN        0xFE00
 #define TMEM_STOP       0xFE03
@@ -48,4 +48,3 @@ struct para{
 #define TMEMINFO(f,arg...)\
        printk(KERN_INFO "TEST_MEM :" f "\n",## arg)
 
-#endif

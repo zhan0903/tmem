@@ -9,6 +9,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <errno.h>
+#include "test_mem.h"
 
 
 struct option_info {
@@ -17,10 +18,10 @@ struct option_info {
         char cmd;
 };
 
-struct para{
-       int threads;
-       unsigned long copysize;
-};
+ /*struct para{
+  *       int threads;
+  *       unsigned long copysize;
+};*/
 
 static struct option_info mkoptions;
 
@@ -39,21 +40,24 @@ void usage(char *name)
 int get_opts(int argc,char *argv[])
 {
         int c,ret = 0;
-        while((c = getopt(argc, argv, "t:b:h")) != -1)
+        while((c = getopt(argc, argv, "qrt:s:h")) != -1)
              switch(c){
              case 'r':
-                 mkoptions.run = 1;
+                 mkoptions.cmd = 'r';
+                 break;
+             case 'q':
+                 mkoptions.cmd = 'q';
                  break;
              case 't':
                  if (optopt == 't')
 		     printf
-		      ("Option -%t requires threads as argument.\n",
+		      ("Option -%c requires threads as argument.\n",
 		       optopt);
 	       	 else
 			sscanf(optarg, "%d",
 			       &mkoptions.threads);
 		 break;
-             case 'b':
+             case 's':
                   if (optopt == 's')
 			printf
 			    ("Option -%c requires copy_size as argument.\n",
@@ -82,6 +86,9 @@ int main(int argc,char *argv[])
 {
 
     struct para pa;
+    int fd,rc = 0;
+    int mode = O_RDWR | O_NOATIME;
+
     if (argc < 3)
         usage(argv[0]);
         if (0 != get_opts(argc, argv))
@@ -105,7 +112,6 @@ int main(int argc,char *argv[])
                  {
                      rc = 1;
                      fprintf(stderr,"failed to run test mem module\n");
-                     return rc;       
                  } 
                  break;
             case 'q':
@@ -113,12 +119,14 @@ int main(int argc,char *argv[])
                   {
                      rc = 1;
                      fprintf(stderr,"failed to stop test mem module\n");  
-                     return rc;
                   }
                   break;
             default:
+                  rc = 1;
                   fprintf(stderr,"unknow command\n");
-                  abort();
         }
-        return 0; 
+
+       	flock(fd, LOCK_UN);
+	close(fd);
+        exit(rc); 
 }
