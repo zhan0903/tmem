@@ -24,6 +24,7 @@ struct option_info {
 };*/
 
 static struct option_info mkoptions;
+static  struct para pa;
 
 void usage(char *name)
 {
@@ -78,6 +79,8 @@ int get_opts(int argc,char *argv[])
               default:
                   abort();
               }
+         pa.threads = mkoptions.threads;
+         pa.copysize = mkoptions.copysize;
          printf("\n");
          return ret;
 }
@@ -85,7 +88,6 @@ int get_opts(int argc,char *argv[])
 int main(int argc,char *argv[])
 {
 
-    struct para pa;
     int fd,rc = 0;
     int mode = O_RDWR | O_NOATIME;
 

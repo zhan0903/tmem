@@ -52,13 +52,13 @@ static int test_thread(void *data)
     start_time = rdtsc();
 
     do{
-       memcpy(buf_write,buf_read,BASIC_SIZE);
+       memcpy(buf_write,buf_read,pa.copysize);
        count++;
      }while((flag != 0) && time_before(jiffies, start+intv));
 
      end_time = rdtsc();
      num_rd = end_time - start_time;
-     TMEMINFO("number of cpuT:%d copy times:%d  BASIC_SIZE:%d\n ",num_rd,count,BASIC_SIZE);
+     TMEMINFO("number of cpuT:%d copy times:%d  COPY_SIZE:%lu\n ",num_rd,count,pa.copysize);
 
      return 0;
 }
