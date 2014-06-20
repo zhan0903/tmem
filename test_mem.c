@@ -9,8 +9,10 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define TMEM_VERSION "0.0.1" 
 /*#define THREADS 8*/
 /*#define BASIC_SIZE 1024*1024*/ 
-#define CPUHZ 2800000000 
+#define CPUHZ 16 /*bandwidth result should divide 100000000 to get MB/S*/
 #define TEST_TIME 10 
+#define BUF_SIZE 128*1024*1024 
+
 
 static int flag = 0;
 static int tflag = 0;
@@ -20,7 +22,7 @@ static struct mutex ioctl_mutex;
 static struct mutex count_mutex;
 static struct para pa;
 static unsigned long total_count = 0,total_nr = 0;
-static unsigned long start_time,end_time;
+static unsigned long start_time = 0,end_time = 0;
 
  
 static __inline__ __u64 rdtsc(void) 
@@ -34,9 +36,9 @@ static __inline__ __u64 rdtsc(void)
 }
 
 /*int rdtsct()
-{
-   return asm("rdtsc");
-}*/
+ * {
+ *    return asm("rdtsc");
+ *    }*/
 
 static int calcu_thread(void *data)
 {
@@ -49,14 +51,20 @@ static int calcu_thread(void *data)
         schedule();
     }
  
-    total_copysize = pa.copysize*total_count/(1024*1024);
-    total_test_time = (end_time - start_time)/CPUHZ;
-    total_average_bandwidth = total_copysize/total_test_time;
-    total_average_copy_time = total_test_time/total_count;
+    total_copysize = pa.copysize*total_count/1024/1024;
 
-    TMEMINFO("TOTAL:copy size:%lu MB test time:%lu ms copy counts:%lu\n",
-             total_copysize,total_test_time,total_count);
-    TMEMINFO("TOTAL:average bandwidth:%dMB/ms average copy time:%dms\n",
+    total_test_time = (end_time - start_time)/CPUHZ;
+   /* total_test_time2 = (end_time - start_time)/CPUHZ/100000;
+ *     *total_test_time3 = total_nr/CPUHZ/100000;
+ *         */
+    total_average_bandwidth = total_copysize*100000000/total_test_time; 
+    total_average_copy_time = total_test_time/total_count/100;
+    
+    printk("total_nr:%lu total_count:%lu\n",total_nr,total_count);
+
+    TMEMINFO("TOTAL:copy size:%luMB test time:%lums copy counts:%lu\n",
+             total_copysize,total_test_time/100000,total_count);
+    TMEMINFO("TOTAL:average bandwidth:%dMB/s average copy time:%d us\n",
               total_average_bandwidth,total_average_copy_time);
     
     return 0;
@@ -64,14 +72,17 @@ static int calcu_thread(void *data)
 
 static int test_thread(void *data)
 {
-    char *buf_read;
-    char *buf_write;
+    char *buf_read,*b_rtemp;
+    char *buf_write,*b_wtemp;
     unsigned long int num_rd,start_t,end_t,count = 0;
-    unsigned long start, intv=TEST_TIME*HZ,t_copy_time,t_bandwidth;
+    unsigned long start, t_copy_time_once,intv=TEST_TIME*HZ,
+                  t_copy_time,t_bandwidth,t_bandwidth2;
 
 
-    buf_read = vmalloc(pa.copysize);
-    buf_write = vmalloc(pa.copysize);
+    buf_read = vmalloc(BUF_SIZE);
+    buf_write = vmalloc(BUF_SIZE);
+    b_rtemp = buf_read;
+    b_wtemp = buf_write;
 
 
     if(!buf_read || !buf_write)
@@ -84,24 +95,40 @@ static int test_thread(void *data)
     start_t = rdtsc();
 
     do{
-       memcpy(buf_write,buf_read,pa.copysize);
+       memcpy(b_rtemp,b_wtemp,pa.copysize);
        count++;
+       b_rtemp += pa.copysize;
+       b_wtemp += pa.copysize;
+       if((count+1)*pa.copysize> BUF_SIZE)
+       {
+          b_rtemp = buf_read;
+          b_wtemp = buf_write;
+       }
+
      }while((flag != 0) && time_before(jiffies, start+intv));
      end_t = rdtsc();
      num_rd = end_t - start_t;
 
      mutex_lock(&count_mutex);
      total_count += count;
-     total_nr += num_rd;
-     tflag--;
+     /*total_nr += num_rd;*/
+     /*tflag--;*/
      mutex_unlock(&count_mutex);
+     tflag--;
      if(tflag == 0)end_time = rdtsc();
 
-     t_copy_time = num_rd/(CPUHZ*count);
-     t_bandwidth = pa.copysize*count*CPUHZ/(1024*1024*num_rd);
+     t_copy_time_once = num_rd/CPUHZ/count/100;
+     t_copy_time = num_rd/CPUHZ/100;
+     t_bandwidth = pa.copysize*CPUHZ*count*100000000/1024/1024/num_rd;
+     t_bandwidth2 = pa.copysize*count*1000000/t_copy_time/1024/1024;
+     
+     printk("%lu,%lu,%lu\n",count,t_copy_time_once,t_bandwidth2);
 
-     TMEMINFO("thread:%i total copy size:%lu number of copy times:%lu\n ",                    current->pid,pa.copysize*count,count);
-     TMEMINFO("copy time for once:%lu ms average bandwidth:%lu MB/ms\n",                       t_copy_time,t_bandwidth);
+/*     TMEMINFO("thread:%i total copy size:%lu number of copy times:%lu\n ",
+*             current->pid,pa.copysize*count,count);
+*      TMEMINFO("copy time for once:%luus t_copy_time:%luus average bandwidth:%lu %luMB/s\n",
+*             t_copy_time_once,t_copy_time,t_bandwidth,t_bandwidth2);
+*/
      return 0;
 }
 
@@ -112,7 +139,6 @@ static long tmem_ioctl(struct file *file,unsigned int cmd,unsigned long arg)
     total_count = 0;
     total_nr = 0;
     flag = 0;
-    
 
     mutex_lock(&ioctl_mutex);
     switch(cmd)
@@ -167,17 +193,16 @@ out:
     return ret;
 }
 
-static ssize_t tmem_read(struct file *file,char *buf,size_t count,
-                        loff_t *f_pos)
-{
-    return copy_to_user(buf,buf_dev,count);
-}
-
+/*static ssize_t tmem_read(struct file *file,char *buf,size_t count,
+ *                         loff_t *f_pos)
+ *                         {
+ *                             return copy_to_user(buf,buf_dev,count);
+ *                             }
+ *                             */
 static const struct file_operations _tmem_ctl_fops = {
         .open = nonseekable_open,
         .unlocked_ioctl = tmem_ioctl,
         .owner = THIS_MODULE,
-        .read = tmem_read,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,2,0)
         .llseek = noop_llseek
 #else
@@ -193,9 +218,9 @@ static struct miscdevice _tmem_misc = {
 };
 
 /*static do_event(char *input,char *output,int num)
-{
-       memcpy(output,input,num);
-}*/
+ * {
+ *        memcpy(output,input,num);
+ *        }*/
 
 static int __init t_init(void)
 {
