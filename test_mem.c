@@ -9,13 +9,14 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define TMEM_VERSION "0.0.1" 
 /*#define THREADS 8*/
 /*#define BASIC_SIZE 1024*1024*/ 
-#define CPUHZ 16 /*bandwidth result should divide 100000000 to get MB/S*/
+#define CPUHZ 26 /*bandwidth result should divide 100000000 to get MB/S*/
 #define TEST_TIME 10 
 #define BUF_SIZE 128*1024*1024 
 
 
 static int flag = 0;
 static int tflag = 0;
+static char *buf_read,*buf_write; 
 static DECLARE_WAIT_QUEUE_HEAD(wq);
 static struct task_struct *_tsk; 
 static struct mutex ioctl_mutex;
@@ -35,47 +36,41 @@ static __inline__ __u64 rdtsc(void)
     return (__u64)hi<<32|lo;
 }
 
-/*int rdtsct()
- * {
- *    return asm("rdtsc");
- *    }*/
 
 static int calcu_thread(void *data)
 {
     unsigned long total_copysize,total_test_time;
-    int total_average_bandwidth,total_average_copy_time;
+    int total_average_bandwidth,total_average_copy_time,total_average_copy_time2;
     
     while(true)
     {
 	if(tflag == 0)break;
         schedule();
     }
+    vfree(buf_read);
+    vfree(buf_write);
  
     total_copysize = pa.copysize*total_count/1024/1024;
-
     total_test_time = (end_time - start_time)/CPUHZ;
-   /* total_test_time2 = (end_time - start_time)/CPUHZ/100000;
- *     *total_test_time3 = total_nr/CPUHZ/100000;
- *         */
     total_average_bandwidth = total_copysize*100000000/total_test_time; 
     total_average_copy_time = total_test_time/total_count/100;
+    total_average_copy_time2 = total_test_time*10/total_count;
     
-    printk("total_nr:%lu total_count:%lu\n",total_nr,total_count);
 
-    TMEMINFO("TOTAL:copy size:%luMB test time:%lums copy counts:%lu\n",
+    printk("TOTAL:copy size:%luMB test time:%lums copy counts:%lu\n",
              total_copysize,total_test_time/100000,total_count);
-    TMEMINFO("TOTAL:average bandwidth:%dMB/s average copy time:%d us\n",
-              total_average_bandwidth,total_average_copy_time);
+    printk("TOTAL:bandwidth:%dMB/s copy time once:%dus %dns\n",             
+             total_average_bandwidth,total_average_copy_time,
+             total_average_copy_time2);
     
     return 0;
 }
 
 static int test_thread(void *data)
 {
-    char *buf_read,*b_rtemp;
-    char *buf_write,*b_wtemp;
-    unsigned long int num_rd,start_t,end_t,count = 0;
-    unsigned long start, t_copy_time_once,intv=TEST_TIME*HZ,
+    char *b_wtemp,*b_rtemp;
+    unsigned long int num_rd,start_t,end_t,count = 0,count_t = 0;
+    unsigned long start, t_copy_time_once,t_copy_time_once2,intv=TEST_TIME*HZ,
                   t_copy_time,t_bandwidth,t_bandwidth2;
 
 
@@ -97,45 +92,43 @@ static int test_thread(void *data)
     do{
        memcpy(b_rtemp,b_wtemp,pa.copysize);
        count++;
+       count_t++;
+
        b_rtemp += pa.copysize;
        b_wtemp += pa.copysize;
-       if((count+1)*pa.copysize> BUF_SIZE)
+       if((count_t+1)*pa.copysize> BUF_SIZE)
        {
+          count_t = 0;
           b_rtemp = buf_read;
           b_wtemp = buf_write;
        }
 
      }while((flag != 0) && time_before(jiffies, start+intv));
+
      end_t = rdtsc();
      num_rd = end_t - start_t;
 
      mutex_lock(&count_mutex);
      total_count += count;
-     /*total_nr += num_rd;*/
-     /*tflag--;*/
      mutex_unlock(&count_mutex);
      tflag--;
      if(tflag == 0)end_time = rdtsc();
 
-     t_copy_time_once = num_rd/CPUHZ/count/100;
+     t_copy_time_once = num_rd/CPUHZ/count/100;/*us*/
+     t_copy_time_once2 = num_rd*10/CPUHZ/count;/*ns*/
      t_copy_time = num_rd/CPUHZ/100;
+     
      t_bandwidth = pa.copysize*CPUHZ*count*100000000/1024/1024/num_rd;
      t_bandwidth2 = pa.copysize*count*1000000/t_copy_time/1024/1024;
      
-     printk("%lu,%lu,%lu\n",count,t_copy_time_once,t_bandwidth2);
+     printk("%lu,%lu,%lu,%lu\n",count,t_copy_time_once,t_copy_time_once2,t_bandwidth2);
 
-/*     TMEMINFO("thread:%i total copy size:%lu number of copy times:%lu\n ",
-*             current->pid,pa.copysize*count,count);
-*      TMEMINFO("copy time for once:%luus t_copy_time:%luus average bandwidth:%lu %luMB/s\n",
-*             t_copy_time_once,t_copy_time,t_bandwidth,t_bandwidth2);
-*/
      return 0;
 }
 
 static long tmem_ioctl(struct file *file,unsigned int cmd,unsigned long arg)
 {
     int ret = 0,i;
-    char *name;
     total_count = 0;
     total_nr = 0;
     flag = 0;
@@ -144,21 +137,22 @@ static long tmem_ioctl(struct file *file,unsigned int cmd,unsigned long arg)
     switch(cmd)
     {
        case TMEM_RUN:
-           name = kmalloc(20*sizeof(char),GFP_KERNEL);
+          /* name = kmalloc(20*sizeof(char),GFP_KERNEL);*/
            if (copy_from_user
 	       (&pa,(struct para __user *)arg, sizeof(pa))) 
                {
                     ret = -EFAULT;
 	       	    break;
 	       }
-           TMEMINFO("thread run time:%ds copy size:%lu threads:%d\n",TEST_TIME,
+           printk("thread run time:%ds copy size:%lu threads:%d\n",TEST_TIME,
                      pa.copysize,pa.threads);
            tflag = pa.threads;
 
+          /* #pragma omp parallel for*/
            for(i = 0;i != pa.threads;i++)
            {
-              sprintf(name,"thread_name:%d",i);
-              _tsk = kthread_create(test_thread,NULL,name);
+              /*sprintf(name,"thread_name:%d",i);*/
+              _tsk = kthread_create(test_thread,NULL,"test_thread");
               if (IS_ERR(_tsk)) 
               {
                   ret = PTR_ERR(_tsk);

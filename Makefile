@@ -10,6 +10,7 @@ clean:
 	rm -rf .tmp_versions
 	rm -f test_mem.ko.unsigned
 	rm -f ttool
+	rm -f .test_mem.c.swp
 pretty: 
 	indent -npro -kr -i8 -ts8 -sob -l80 -ss -ncs -cp1 *.c
 	rm -f *.c~
