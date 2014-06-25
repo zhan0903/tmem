@@ -16,7 +16,6 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 static int flag = 0;
 static int tflag = 0;
-static char *buf_read,*buf_write; 
 static DECLARE_WAIT_QUEUE_HEAD(wq);
 static struct task_struct *_tsk; 
 static struct mutex ioctl_mutex;
@@ -69,6 +68,7 @@ static int calcu_thread(void *data)
 static int test_thread(void *data)
 {
     char *b_wtemp,*b_rtemp;
+    char *buf_read,*buf_write; 
     unsigned long int num_rd,start_t,end_t,count = 0,count_t = 0;
     unsigned long start, t_copy_time_once,t_copy_time_once2,intv=TEST_TIME*HZ,
                   t_copy_time,t_bandwidth,t_bandwidth2;
@@ -107,6 +107,8 @@ static int test_thread(void *data)
 
      end_t = rdtsc();
      num_rd = end_t - start_t;
+     vfree(buf_read);
+     vfree(buf_write);
 
      mutex_lock(&count_mutex);
      total_count += count;
