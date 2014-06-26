@@ -7,8 +7,6 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 
 #define TMEM_VERSION "0.0.1" 
-/*#define THREADS 8*/
-/*#define BASIC_SIZE 1024*1024*/ 
 #define CPUHZ 26 /*bandwidth result should divide 100000000 to get MB/S*/
 #define TEST_TIME 10 
 #define BUF_SIZE 128*1024*1024 
@@ -46,8 +44,6 @@ static int calcu_thread(void *data)
 	if(tflag == 0)break;
         schedule();
     }
-    vfree(buf_read);
-    vfree(buf_write);
  
     total_copysize = pa.copysize*total_count/1024/1024;
     total_test_time = (end_time - start_time)/CPUHZ;
