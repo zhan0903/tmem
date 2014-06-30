@@ -65,7 +65,8 @@ static int test_thread(void *data)
 {
     char *b_wtemp,*b_rtemp;
     char *buf_read,*buf_write; 
-    unsigned long int num_rd,start_t,end_t,count = 0,count_t = 0;
+    unsigned long int num_rd,start_t,end_t;
+    register unsigned long int count = 0,count_t = 0;
     unsigned long start, t_copy_time_once,t_copy_time_once2,intv=TEST_TIME*HZ,
                   t_copy_time,t_bandwidth,t_bandwidth2;
 
